@@ -170,7 +170,7 @@ Transform:
   m_GameObject: {fileID: 330401709}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1, y: -6, z: 0}
+  m_LocalPosition: {x: 0.95, y: -8.4, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -615,8 +615,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4566148efded843ba90360aa615a5bdc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_PortName: /dev/tty.usbmodem12201
+  m_PortName: /dev/tty.usbmodem12401
   m_BaudRate: 9600
+  m_MinDistance: 0
+  m_MaxDistance: 50
+  m_SmoothingFrames: 5
+  m_ResponseSpeed: 5
+  m_KeyboardControlSpeed: 30
   m_SensorDistance: 0
 --- !u!4 &1788903949
 Transform:
