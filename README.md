@@ -4,4 +4,7 @@ We used a Ultrasonic Distance Sensor hooked up to an Arduino Nano that has the (
 
 You can play the demo without it by just using up and down to control the wave level instead.
 
-Short video can be seen [![here]](demo.mov)
+Short video can be seen here:
+
+https://github.com/user-attachments/assets/64f3b3a8-e116-4a6e-b9b5-d2245b143eae
+
