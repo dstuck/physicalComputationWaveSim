@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public class WaterSurfaceManager : MonoBehaviour
 {
@@ -13,6 +14,21 @@ public class WaterSurfaceManager : MonoBehaviour
     [SerializeField, Range(0f, 5f)] private float m_WaveSpeed = 1f;
     [SerializeField, Range(0f, 5f)] private float m_WaveLength = 2f;
 
+    [Header("Wave Impact Settings")]
+    [SerializeField] private float m_ImpactWaveHeight = 2f;
+    [SerializeField] private float m_ImpactWaveWidth = 4f;
+    [SerializeField] private float m_ImpactWaveSpeed = 2f;
+    [SerializeField] private float m_ImpactWaveDecay = 1f;
+
+    [Header("Sensor Wave Settings")]
+    [SerializeField] private float m_MaxSensorDistance = 30f;
+    [SerializeField] private float m_WavePropagationSpeed = 5f;
+    [SerializeField] private float m_SensorWaveHeight = 2f;
+    
+    private ArduinoManager m_ArduinoManager;
+    private float[] m_WaveHeights;
+    private float[] m_WaveVelocities;
+
     private Mesh m_Mesh;
     private Vector3[] m_BaseVertices;
     private Vector3[] m_Vertices;
@@ -21,6 +37,22 @@ public class WaterSurfaceManager : MonoBehaviour
     private MeshRenderer m_MeshRenderer;
     private int m_GridSizeX;
     private int m_GridSizeZ;
+
+    // private List<WavePoint> m_WavePoints = new List<WavePoint>();
+
+    // private struct WavePoint
+    // {
+    //     public float Position;    // X position of wave
+    //     public float Amplitude;   // Current height
+    //     public float Time;        // Time since creation
+        
+    //     public WavePoint(float pos, float amp)
+    //     {
+    //         Position = pos;
+    //         Amplitude = amp;
+    //         Time = 0f;
+    //     }
+    // }
     #endregion
 
     #region Unity Lifecycle
@@ -59,10 +91,28 @@ public class WaterSurfaceManager : MonoBehaviour
     private void Start()
     {
         InitializeWaterMesh();
+        
+        m_ArduinoManager = FindFirstObjectByType<ArduinoManager>();
+        if (m_ArduinoManager == null)
+        {
+            Debug.LogError($"[{nameof(WaterSurfaceManager)}] No ArduinoManager found in scene!");
+        }
+
+        // Initialize wave simulation arrays
+        m_WaveHeights = new float[m_GridSizeX + 1];
+        m_WaveVelocities = new float[m_GridSizeX + 1];
     }
 
     private void Update()
     {
+        // // Check for spacebar input
+        // if (Input.GetKeyDown(KeyCode.Space))
+        // {
+        //     // Create wave at mouse position
+        //     Vector2 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        //     CreateWave(mousePos.x);
+        // }
+
         UpdateWaveMotion();
     }
     #endregion
@@ -85,8 +135,6 @@ public class WaterSurfaceManager : MonoBehaviour
         // Store base vertices for wave calculation
         m_BaseVertices = m_Mesh.vertices;
         m_Vertices = new Vector3[m_BaseVertices.Length];
-        
-        Debug.Log($"[{nameof(WaterSurfaceManager)}] Mesh created with {m_BaseVertices.Length} vertices");
     }
 
     private void CreateMeshGrid()
@@ -135,28 +183,72 @@ public class WaterSurfaceManager : MonoBehaviour
         m_Mesh.triangles = triangles;
         m_Mesh.uv = uvs;
         m_Mesh.RecalculateNormals();
-
-        Debug.Log($"[{nameof(WaterSurfaceManager)}] Created mesh grid: {m_GridSizeX}x{m_GridSizeZ} " +
-                  $"with {vertices.Length} vertices and {triangles.Length/3} triangles");
     }
+
+    // private void CreateWave(float _xPosition)
+    // {
+    //     // Convert world position to local space
+    //     Vector3 localPos = transform.InverseTransformPoint(new Vector3(_xPosition, 0, 0));
+    //     m_WavePoints.Add(new WavePoint(localPos.x, m_ImpactWaveHeight));
+        
+    //     Debug.Log($"[{nameof(WaterSurfaceManager)}] Created wave at x: {_xPosition}");
+    // }
 
     private void UpdateWaveMotion()
     {
+        if (m_ArduinoManager != null)
+        {
+            // Update leftmost point based on sensor
+            float normalizedHeight = 1f - (m_ArduinoManager.m_SensorDistance / m_MaxSensorDistance);
+            float targetHeight = normalizedHeight * m_SensorWaveHeight;
+            
+            // Apply height to leftmost points
+            m_WaveHeights[0] = targetHeight;
+        }
+
+        // Propagate waves
+        float deltaTime = Time.deltaTime;
+        float springConstant = 80f;
+        float damping = 0.5f;
+        
+        // Update wave physics
+        for (int i = 0; i < m_WaveHeights.Length; i++)
+        {
+            // Calculate forces on each point
+            float force = 0f;
+            
+            // Spring force from neighbors
+            if (i > 0)
+                force += springConstant * (m_WaveHeights[i-1] - m_WaveHeights[i]);
+            if (i < m_WaveHeights.Length - 1)
+                force += springConstant * (m_WaveHeights[i+1] - m_WaveHeights[i]);
+            
+            // Apply damping
+            force -= m_WaveVelocities[i] * damping;
+            
+            // Update velocity and position
+            m_WaveVelocities[i] += force * deltaTime;
+            if (i > 0) // Don't update first point as it's controlled by sensor
+                m_WaveHeights[i] += m_WaveVelocities[i] * deltaTime;
+        }
+
+        // Apply wave heights to mesh
         for (int i = 0; i < m_BaseVertices.Length; i++)
         {
             Vector3 vertex = m_BaseVertices[i];
             
-            float x = vertex.x;
-            float time = Time.time * m_WaveSpeed;
-            float wave = m_WaveHeight * Mathf.Sin(x / m_WaveLength + time);
+            // Find the corresponding wave height index
+            int waveIndex = Mathf.FloorToInt((vertex.x + m_WaterSize.x * 0.5f) / m_CellSize);
+            waveIndex = Mathf.Clamp(waveIndex, 0, m_WaveHeights.Length - 1);
             
-            m_Vertices[i] = new Vector3(vertex.x, vertex.y + wave, vertex.z);
+            float waveHeight = m_WaveHeights[waveIndex];
+            m_Vertices[i] = new Vector3(vertex.x, vertex.y + waveHeight, vertex.z);
         }
 
+        // Apply updates
         m_Mesh.vertices = m_Vertices;
         m_Mesh.RecalculateNormals();
         
-        // Update edge collider points
         UpdateEdgeCollider();
     }
 
